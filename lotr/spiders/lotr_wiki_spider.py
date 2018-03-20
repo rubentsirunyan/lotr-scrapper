@@ -1,4 +1,5 @@
 import scrapy
+import re
 
 
 class LotrWikiSpider(scrapy.Spider):
@@ -27,6 +28,25 @@ class LotrWikiSpider(scrapy.Spider):
         info = response.css('section.pi-item.pi-group.pi-border-color div.pi-item.pi-data.pi-item-spacing.pi-border-color')
         info_dict = {}
         for section in info:
-            info_dict[section.css('h3.pi-data-label.pi-secondary-font::text').extract_first()] = ''.join(section.css('div.pi-data-value.pi-font *::text').extract())
-        info_dict['name'] = response.css('header#PageHeader.page-header div.page-header__main h1.page-header__title::text').extract_first(),
+            if "see more" in section.css('div.pi-data-value.pi-font *::text').extract():
+                info_dict[section.css('h3.pi-data-label.pi-secondary-font::text').extract_first()] = self.parse_see_more(response, section.css('h3.pi-data-label.pi-secondary-font::text').extract_first())
+            elif "Titles" in section.css('h3.pi-data-label.pi-secondary-font::text').extract_first() or "Other names" in section.css('h3.pi-data-label.pi-secondary-font::text').extract_first() or "Weapon" in section.css('h3.pi-data-label.pi-secondary-font::text').extract_first():
+                info_dict[section.css('h3.pi-data-label.pi-secondary-font::text').extract_first()] = self.parse_more_details(section.css('div.pi-data-value.pi-font *::text').extract())
+            else:
+                info_dict[section.css('h3.pi-data-label.pi-secondary-font::text').extract_first()] = ''.join(self.parse_more_details(section.css('div.pi-data-value.pi-font *::text').extract()))
+        info_dict['Name'] = response.css('header#PageHeader.page-header div.page-header__main h1.page-header__title::text').extract_first()
+        self.log(info_dict)
         yield info_dict
+
+    def parse_see_more(self, response, title):
+        return response.xpath("//h3/span[contains(text(), '{}')]/parent::*/following-sibling::ul[1]/li/b/text()".format(title.title())).extract()
+
+    def parse_more_details(self, _list):
+        expr = re.compile("\\[[0-9]\\]")
+        for i in _list:
+            if expr.match(i):
+                _list.remove(i)
+        _list = ''.join(_list).split(',')
+        for i in _list:
+            _list[_list.index(i)] = i.strip()
+        return _list

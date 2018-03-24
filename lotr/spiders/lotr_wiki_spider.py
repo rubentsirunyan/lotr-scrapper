@@ -1,52 +1,67 @@
-import scrapy
 import re
+import scrapy
 
 
 class LotrWikiSpider(scrapy.Spider):
+    """
+    docstring
+    """
+
     name = "lotrwiki"
     start_urls = [
         'http://lotr.wikia.com/wiki/Category:Characters',
     ]
 
+    def __init__(self):
+        self.sections = {
+            'characters':  'div#mw-content-text div div#mw-pages div.mw-content-ltr table tr td',
+            'next_page': 'div.wikia-paginator ul li a.paginator-next::attr(href)',
+            'info': 'section.pi-item div.pi-item',
+            'info_key': 'h3.pi-data-label::text',
+            'info_value': 'div.pi-data-value.pi-font *::text',
+            'name': 'header#PageHeader.page-header h1.page-header__title::text',
+            'see_more': "//h3/span[contains(text(), '{}')]/parent::*/following-sibling::ul[1]/li/b/text()"
+        }
+
     def parse(self, response):
-        # page = response.url.split("/")[-1]
-        # filename = 'pages-%s.html' % page
-        # with open(filename, 'wb') as f:
-        #     f.write(response.body)
-        characters = []
-        for td in response.css('div#mw-content-text.mw-content-ltr.mw-content-text div div#mw-pages div.mw-content-ltr table tr td'):
+
+        for td in response.css(self.sections['characters']):
             for li in td.css('ul li'):
                 url = response.urljoin(li.css('a::attr(href)').extract_first())
-                # self.log(url)
-                yield scrapy.Request(url=url,callback=self.parse_character_details)
+                yield scrapy.Request(url=url,
+                                     callback=self.parse_character_details)
 
-        next_page = response.css('div.wikia-paginator ul li a.paginator-next.button.secondary::attr(href)').extract_first()
+        next_page = response.css(self.sections['next_page']).extract_first()
         if next_page is not None:
-            yield response.follow(next_page, callback=self.parse)
+            yield response.follow(next_page,
+                                  callback=self.parse)
 
     def parse_character_details(self, response):
-        info = response.css('section.pi-item.pi-group.pi-border-color div.pi-item.pi-data.pi-item-spacing.pi-border-color')
-        info_dict = {}
-        for section in info:
-            if "see more" in section.css('div.pi-data-value.pi-font *::text').extract():
-                info_dict[section.css('h3.pi-data-label.pi-secondary-font::text').extract_first()] = self.parse_see_more(response, section.css('h3.pi-data-label.pi-secondary-font::text').extract_first())
-            elif "Titles" in section.css('h3.pi-data-label.pi-secondary-font::text').extract_first() or "Other names" in section.css('h3.pi-data-label.pi-secondary-font::text').extract_first() or "Weapon" in section.css('h3.pi-data-label.pi-secondary-font::text').extract_first():
-                info_dict[section.css('h3.pi-data-label.pi-secondary-font::text').extract_first()] = self.parse_more_details(section.css('div.pi-data-value.pi-font *::text').extract())
+        self.info_dict = {}
+        for section in response.css(self.sections['info']):
+            if "see more" in section.css(self.sections['info_value']).extract():
+                self.info_dict[section.css(self.sections['info_key']).extract_first()] = self.parse_see_more(response, section.css(self.sections['info_key']).extract_first())
+            elif "Titles" in section.css(self.sections['info_key']).extract_first()\
+                 or "Other names" in section.css(self.sections['info_key']).extract_first()\
+                 or "Weapon" in section.css(self.sections['info_key']).extract_first():
+                self.info_dict[section.css(self.sections['info_key']).extract_first()] = self.parse_more_details(section.css(self.sections['info_value']).extract())
             else:
-                info_dict[section.css('h3.pi-data-label.pi-secondary-font::text').extract_first()] = ''.join(self.parse_more_details(section.css('div.pi-data-value.pi-font *::text').extract()))
-        info_dict['Name'] = response.css('header#PageHeader.page-header div.page-header__main h1.page-header__title::text').extract_first()
-        self.log(info_dict)
-        yield info_dict
+                self.info_dict[section.css(self.sections['info_key']).extract_first()] = ''.join(self.parse_more_details(section.css(self.sections['info_value']).extract()))
+        self.info_dict['Name'] = response.css(self.sections['name']).extract_first()
+        yield self.info_dict
 
     def parse_see_more(self, response, title):
-        return response.xpath("//h3/span[contains(text(), '{}')]/parent::*/following-sibling::ul[1]/li/b/text()".format(title.title())).extract()
+        self.response = response
+        self.title = title
+        return self.response.xpath(self.sections['see_more'].format(self.title.title())).extract()
 
     def parse_more_details(self, _list):
-        expr = re.compile("\\[[0-9]\\]")
-        for i in _list:
-            if expr.match(i):
-                _list.remove(i)
-        _list = ''.join(_list).split(',')
-        for i in _list:
-            _list[_list.index(i)] = i.strip()
-        return _list
+        self.expr = re.compile("\\[[0-9]\\]")
+        self.list = _list
+        for i in self.list:
+            if self.expr.match(i):
+                self.list.remove(i)
+        self.list = ''.join(self.list).split(',')
+        for i in self.list:
+            self.list[self.list.index(i)] = i.strip()
+        return self.list

@@ -45,7 +45,8 @@ class LotrWikiSpider(scrapy.Spider):
                  = self.parse_see_more(response, s.css(self.ss['info_key']).extract_first())
             elif "Titles" in s.css(self.ss['info_key']).extract_first()\
                  or "Other names" in s.css(self.ss['info_key']).extract_first()\
-                 or "Weapon" in s.css(self.ss['info_key']).extract_first():
+                 or "Weapon" in s.css(self.ss['info_key']).extract_first()\
+                 or "Race" in s.css(self.ss['info_key']).extract_first():
                 self.i[s.css(self.ss['info_key']).extract_first()]\
                  = self.parse_more_details(s.css(self.ss['info_value']).extract())
             else:
@@ -58,9 +59,6 @@ class LotrWikiSpider(scrapy.Spider):
         self.r = response
         self.t1 = title.replace(' ', '_')
         self.t2 = title.title().replace(' ', '_')
-        # if len(title.split()) > 2:
-        #     self.t1 = '_'.join(self.t1.split())
-        #     self.t2 = '_'.join(self.t2.split())
         if self.r.xpath(self.ss['see_more_b'].format(self.t1, self.t2)):
             return self.r.xpath(self.ss['see_more_b'].format(self.t1, self.t2)).extract()
         else:
